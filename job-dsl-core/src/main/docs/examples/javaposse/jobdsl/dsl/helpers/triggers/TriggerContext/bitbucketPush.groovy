@@ -1,5 +1,0 @@
-job('example') {
-    triggers {
-        bitbucketPush()
-    }
-}

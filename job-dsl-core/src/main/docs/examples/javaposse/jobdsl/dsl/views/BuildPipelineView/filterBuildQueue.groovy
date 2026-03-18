@@ -1,3 +1,0 @@
-buildPipelineView('example') {
-    filterBuildQueue()
-}

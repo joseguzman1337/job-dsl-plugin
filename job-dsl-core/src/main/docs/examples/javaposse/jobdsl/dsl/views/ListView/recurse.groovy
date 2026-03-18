@@ -1,3 +1,0 @@
-listView('project-A') {
-    recurse()
-}

@@ -1,5 +1,0 @@
-job('example') {
-    publishers {
-        chucknorris()
-    }
-}

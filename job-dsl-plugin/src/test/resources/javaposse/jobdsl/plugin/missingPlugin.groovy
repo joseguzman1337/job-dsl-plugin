@@ -1,6 +1,0 @@
-job('a') {
-    publishers {
-        extendedEmail {
-        }
-    }
-}

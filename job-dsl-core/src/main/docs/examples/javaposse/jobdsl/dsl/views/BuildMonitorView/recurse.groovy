@@ -1,3 +1,0 @@
-buildMonitorView('project-A') {
-    recurse()
-}

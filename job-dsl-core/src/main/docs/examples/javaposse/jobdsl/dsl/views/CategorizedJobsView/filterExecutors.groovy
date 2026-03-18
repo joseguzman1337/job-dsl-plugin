@@ -1,3 +1,0 @@
-categorizedJobsView('example') {
-    filterExecutors()
-}

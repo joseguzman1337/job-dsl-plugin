@@ -1,6 +1,0 @@
-job('a') {
-    steps {
-        criticalBlock {
-        }
-    }
-}

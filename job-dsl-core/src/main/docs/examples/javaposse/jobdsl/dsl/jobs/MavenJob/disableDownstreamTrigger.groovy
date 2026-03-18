@@ -1,3 +1,0 @@
-mavenJob('example') {
-    disableDownstreamTrigger()
-}

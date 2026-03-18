@@ -1,3 +1,0 @@
-job('example') {
-    concurrentBuild()
-}

@@ -1,3 +1,0 @@
-listView('example') {
-    filterExecutors()
-}

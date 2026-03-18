@@ -1,3 +1,0 @@
-matrixJob('example') {
-    runSequentially()
-}

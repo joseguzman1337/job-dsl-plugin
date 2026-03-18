@@ -1,3 +1,0 @@
-sectionedView('example') {
-    filterExecutors()
-}

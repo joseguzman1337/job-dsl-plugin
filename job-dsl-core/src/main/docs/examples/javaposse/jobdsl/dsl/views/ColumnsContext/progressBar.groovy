@@ -1,5 +1,0 @@
-listView('example') {
-    columns {
-        progressBar()
-    }
-}

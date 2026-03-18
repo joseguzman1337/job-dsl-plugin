@@ -1,3 +1,0 @@
-deliveryPipelineView('example') {
-    showAggregatedPipeline()
-}

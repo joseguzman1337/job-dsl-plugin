@@ -1,3 +1,0 @@
-nestedView('example') {
-    filterExecutors()
-}

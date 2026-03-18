@@ -1,5 +1,0 @@
-listView('example') {
-    jobFilters {
-        all()
-    }
-}
