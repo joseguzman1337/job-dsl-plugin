@@ -1,0 +1,211 @@
+import org.apache.tools.ant.filters.ReplaceTokens
+
+buildscript {
+    repositories {
+        jcenter()
+    }
+    dependencies {
+        classpath 'com.github.rholder:gradle-one-jar:1.0.4'
+        classpath 'org.ajoberstar:gradle-git:0.12.0'
+    }
+}
+
+plugins {
+    // need to be in the root project as workaround for https://github.com/michel-kraemer/gradle-download-task/issues/48
+    id 'de.undercouch.download' version '3.1.2'
+}
+
+defaultTasks 'build' // for BuildHive
+
+configure(subprojects - project(':job-dsl-api-viewer')) {
+    group = 'org.jenkins-ci.plugins'
+
+    apply plugin: 'groovy'
+    apply plugin: 'maven' // for publishing
+    apply plugin: 'codenarc'
+
+    sourceCompatibility = 1.6
+    targetCompatibility = 1.6
+
+    dependencies {
+        compile "org.codehaus.groovy:groovy-all:${groovyVersion}"
+        testCompile 'org.spockframework:spock-core:0.7-groovy-1.8'
+        testCompile 'junit:junit-dep:4.10'
+        testCompile 'cglib:cglib-nodep:2.2.2' // used by Spock
+        testCompile 'org.objenesis:objenesis:1.2' // used by Spock
+    }
+
+    codenarc {
+        toolVersion = '0.26.0'
+        configFile = file('../config/codenarc/rules.groovy')
+    }
+
+    codenarcTest {
+        configFile = file('../config/codenarc/rules-test.groovy')
+    }
+}
+
+project(':job-dsl-core') {
+    repositories {
+        jcenter()
+        maven {
+            url('https://repo.jenkins-ci.org/public/')
+        }
+    }
+
+    apply plugin: 'application'
+    apply plugin: 'gradle-one-jar'
+    apply plugin: 'maven-publish'
+
+    sourceSets {
+        ast {
+            groovy {
+                srcDir 'src/ast/groovy'
+            }
+            resources {
+                srcDir 'src/ast/resources'
+            }
+        }
+        examples {
+            groovy {
+                srcDirs 'src/main/docs/examples'
+            }
+        }
+        main.compileClasspath += sourceSets.ast.output
+        test.compileClasspath += sourceSets.ast.output
+    }
+
+    description = 'Generates Jenkins jobs via a DSL'
+    mainClassName = 'javaposse.jobdsl.Run'
+
+    ext {
+        apiDocData = "${project.buildDir}/dsl.json"
+    }
+
+    dependencies {
+        astCompile "org.codehaus.groovy:groovy-all:${groovyVersion}"
+        compile 'commons-codec:commons-codec:1.8' // for Perforce
+        compile 'xmlunit:xmlunit:1.4' // for runtime use, not just for testing
+        compile('org.jvnet.hudson:xstream:1.4.7-jenkins-1') {
+            exclude group: 'xmlpull'
+            exclude group: 'xpp3'
+        }
+    }
+
+    codenarcExamples {
+        configFile = file('../config/codenarc/rules-examples.groovy')
+    }
+
+    jar {
+        manifest {
+            attributes 'Main-Class': project.mainClassName
+            attributes 'Implementation-Version': version
+        }
+    }
+
+    task jarSources(type: Jar) {
+        from sourceSets.main.allSource
+        classifier = 'sources'
+    }
+
+    task jarJavadocs(type: Jar, dependsOn: 'javadoc') {
+        from project.javadoc.destinationDir
+        classifier = 'javadoc'
+    }
+
+    task jarGroovydocs(type: Jar, dependsOn: 'groovydoc') {
+        from project.groovydoc.destinationDir
+        classifier = 'groovydoc'
+    }
+
+    task oneJar(type: OneJar) {
+        mainClass = project.mainClassName
+    }
+
+    task generateApiDoc(type: JavaExec, dependsOn: 'classes') {
+        main = 'javaposse.jobdsl.dsl.doc.ApiDocGenerator'
+        classpath = sourceSets.main.runtimeClasspath
+        args = [version, apiDocData]
+
+        inputs.dir "${project.projectDir}/src/main/docs"
+        outputs.file apiDocData
+    }
+
+    jar {
+        from(tasks.generateApiDoc) {
+            into 'javaposse/jobdsl/dsl'
+        }
+    }
+
+    run {
+        if (project.hasProperty('args')) {
+            args project.args.split('\\s+')
+        }
+    }
+
+    publishing {
+        publications {
+            maven(MavenPublication) {
+                from components.java
+
+                artifact jarJavadocs
+                artifact jarGroovydocs
+                artifact jarSources
+                artifact oneJar
+                artifact source: apiDocData, extension: 'json', classifier: 'apidoc' builtBy(project.tasks.generateApiDoc)
+            }
+        }
+
+        repositories {
+            maven {
+                name 'jenkins'
+                if (project.version.toString().endsWith('-SNAPSHOT')) {
+                    url 'https://repo.jenkins-ci.org/snapshots'
+                } else {
+                    url 'https://repo.jenkins-ci.org/releases'
+                }
+            }
+        }
+    }
+
+    // gradle-jpi plugin does this for plugins, so we're mimicking it to get our additional artifacts up to repo.jenkinsci.org
+    gradle.taskGraph.whenReady { taskGraph ->
+        if (taskGraph.hasTask(tasks.publish)) {
+            PublishingExtension publishingExtension = project.extensions.getByType(PublishingExtension)
+            def credentials = loadCredentialsForJenkinsCommunityRepository()
+            publishingExtension.repositories.getByName('jenkins').credentials {
+                username credentials.userName
+                password credentials.password
+            }
+        }
+    }
+}
+
+private Map loadCredentialsForJenkinsCommunityRepository() {
+    def dot = new File(System.getProperty('user.home'), '.jenkins-ci.org')
+
+    if (!dot.exists()) {
+        throw new Exception("Trying to deploy to Jenkins community repository but there's no credential file ${dot}. See https://wiki.jenkins-ci.org/display/JENKINS/Dot+Jenkins+Ci+Dot+Org")
+    }
+
+    Properties props = new Properties()
+    dot.withInputStream { i -> props.load(i) }
+    [userName: props.userName, password: props.password]
+}
+
+apply plugin: 'org.ajoberstar.github-pages'
+
+githubPages {
+    commitMessage = "updated wiki for $version"
+    repoUri = "git@github.com:$githubUser/job-dsl-plugin.wiki.git"
+    targetBranch = 'master'
+    workingPath = "$buildDir/wiki"
+    pages {
+        from 'docs'
+        filesMatching('*.md') {
+            filter(ReplaceTokens, tokens: [version: version, jenkinsVersion: jenkinsVersion])
+        }
+    }
+}
+
+task publishDocs(dependsOn: ['publishGhPages', ':job-dsl-api-viewer:publishGhPages'])
